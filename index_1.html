@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Concert Tracker</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Concerts">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f3f0f6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#140f1a" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Figtree:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a stack of ticket stubs. Date on the torn-off stub, show on the ticket. */
+:root{
+  --bg:#f3f0f6;
+  --surface:#ffffff;
+  --ink:#1e1528;
+  --muted:#6c6278;
+  --line:#d9d1e2;
+  --accent:#c8174f;
+  --accent-ink:#ffffff;
+  --gold:#a86a00;
+  --danger:#b3261e;
+  --display:"Big Shoulders Display","Arial Narrow","Helvetica Neue Condensed",Impact,sans-serif;
+  --body:"Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#140f1a; --surface:#1f1729; --ink:#f2ecf7; --muted:#a99db7; --line:#382b44;
+    --accent:#ff5c8f; --accent-ink:#1a0710; --gold:#f0b23e; --danger:#ff8a80;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#140f1a; --surface:#1f1729; --ink:#f2ecf7; --muted:#a99db7; --line:#382b44;
+  --accent:#ff5c8f; --accent-ink:#1a0710; --gold:#f0b23e; --danger:#ff8a80;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg);color:var(--ink);
+  font:400 16px/1.4 var(--body);
+  -webkit-text-size-adjust:100%;
+  display:flex;flex-direction:column;
+  overscroll-behavior:none;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+[hidden]{display:none !important}
+
+/* ---------- header ---------- */
+header{
+  flex:none;
+  padding:calc(12px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 10px max(16px,env(safe-area-inset-left));
+  display:flex;flex-direction:column;gap:10px;
+  width:100%;max-width:640px;margin:0 auto;
+}
+.head-row{display:flex;align-items:flex-end;gap:12px}
+.head-row h1{
+  flex:1;min-width:0;margin:0;
+  font:900 34px/0.95 var(--display);letter-spacing:.01em;text-transform:uppercase;
+  text-wrap:balance;overflow-wrap:anywhere;
+}
+.head-sub{margin:0;color:var(--muted);font-size:14px;font-variant-numeric:tabular-nums}
+.back{
+  flex:none;border:1px solid var(--line);background:var(--surface);
+  border-radius:999px;padding:8px 14px;font-weight:600;font-size:14px;
+}
+.tools{display:flex;flex-wrap:wrap;gap:8px}
+.tools input[type=search]{
+  flex:1 1 180px;min-width:0;
+  border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 12px;
+}
+.tools select{
+  flex:0 1 auto;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 8px;
+}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;
+  border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:8px 12px;font-size:14px;
+}
+.chip input{accent-color:var(--accent);margin:0;width:16px;height:16px}
+
+/* ---------- main ---------- */
+main{
+  flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  width:100%;max-width:640px;margin:0 auto;
+  padding:4px max(16px,env(safe-area-inset-right)) 96px max(16px,env(safe-area-inset-left));
+}
+.notice{
+  display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;
+  border:1px dashed var(--accent);border-radius:10px;padding:10px 12px;margin:0 0 14px;font-size:14px;
+}
+.notice span{flex:1 1 200px}
+.notice button{border:0;background:none;color:var(--accent);font-weight:600;padding:4px 0;text-decoration:underline}
+
+.year{
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  margin:18px 0 8px;
+}
+.year:first-child{margin-top:4px}
+.year b{font:900 44px/0.9 var(--display);color:var(--accent);font-variant-numeric:tabular-nums}
+.year span{color:var(--muted);font-size:14px}
+
+.list{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+
+/* ticket stub */
+.stub{
+  position:relative;overflow:hidden;width:100%;text-align:left;
+  display:grid;grid-template-columns:62px 1fr auto;align-items:stretch;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:0;
+}
+.stub-date{
+  position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  padding:10px 0;border-right:2px dashed var(--line);
+}
+.stub-date::before,.stub-date::after{
+  content:"";position:absolute;right:-8px;width:14px;height:14px;border-radius:50%;
+  background:var(--bg);border:1px solid var(--line);
+}
+.stub-date::before{top:-8px}
+.stub-date::after{bottom:-8px}
+.stub-date b{font:900 30px/0.9 var(--display);font-variant-numeric:tabular-nums}
+.stub-date span{font:700 13px/1 var(--display);letter-spacing:.12em;color:var(--muted)}
+.stub-body{min-width:0;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.stub-artist{font:700 22px/1.05 var(--display);letter-spacing:.01em;text-transform:uppercase;overflow-wrap:anywhere}
+.stub-meta{font-size:14px;color:var(--muted);overflow-wrap:anywhere}
+.stub-side{padding:10px 12px 10px 0;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:4px}
+.stars{color:var(--gold);font-size:13px;letter-spacing:1px;white-space:nowrap}
+.pill{
+  font:700 12px/1 var(--display);letter-spacing:.1em;text-transform:uppercase;
+  border:1px solid var(--accent);color:var(--accent);border-radius:999px;padding:4px 8px;white-space:nowrap;
+}
+
+/* artist / venue rows */
+.row{
+  width:100%;text-align:left;display:grid;grid-template-columns:56px 1fr;align-items:center;gap:0 12px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+}
+.row-count{font:900 30px/1 var(--display);color:var(--accent);font-variant-numeric:tabular-nums;text-align:center}
+.row-count small{font-size:16px;font-weight:700}
+.row-main{min-width:0;display:flex;flex-direction:column;gap:2px}
+.row-name{font:700 22px/1.05 var(--display);text-transform:uppercase;letter-spacing:.01em;overflow-wrap:anywhere}
+.row-meta{font-size:14px;color:var(--muted)}
+
+.empty{color:var(--muted);padding:28px 4px;text-align:left;max-width:40ch}
+
+/* backup view */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:12px;display:flex;flex-direction:column;gap:10px}
+.panel h2{margin:0;font:700 22px/1 var(--display);text-transform:uppercase;letter-spacing:.02em}
+.panel p{margin:0;color:var(--muted);font-size:15px;max-width:60ch}
+.panel p.warn{color:var(--accent);font-weight:600}
+.btn-row{display:flex;flex-wrap:wrap;gap:8px}
+.btn{
+  border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:11px 14px;font-weight:600;
+}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{color:var(--danger);background:none;border-color:transparent;padding-left:0}
+
+/* ---------- add button + nav ---------- */
+.fab{
+  position:fixed;z-index:5;
+  right:max(16px,env(safe-area-inset-right));
+  bottom:calc(64px + env(safe-area-inset-bottom));
+  border:0;border-radius:999px;background:var(--accent);color:var(--accent-ink);
+  font:700 20px/1 var(--display);letter-spacing:.06em;text-transform:uppercase;
+  padding:14px 20px;box-shadow:0 6px 18px rgba(30,21,40,.28);
+}
+nav{
+  flex:none;display:grid;grid-template-columns:repeat(4,1fr);
+  background:var(--surface);border-top:1px solid var(--line);
+  padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+nav a{
+  position:relative;display:block;text-align:center;text-decoration:none;color:var(--muted);
+  font:700 16px/1 var(--display);letter-spacing:.1em;text-transform:uppercase;padding:17px 4px 15px;
+  border-top:3px solid transparent;margin-top:-1px;
+}
+nav a[aria-current="page"]{color:var(--ink);border-top-color:var(--accent)}
+nav a .dot{position:absolute;top:10px;right:calc(50% - 38px);width:8px;height:8px;border-radius:50%;background:var(--accent)}
+
+/* ---------- dialogs ---------- */
+dialog{
+  border:0;padding:0;color:var(--ink);background:var(--surface);
+  width:min(100%,560px);max-width:100%;max-height:92%;
+  margin:auto auto 0;border-radius:16px 16px 0 0;
+}
+dialog::backdrop{background:rgba(20,15,26,.55)}
+@media (min-width:600px){dialog{margin:auto;border-radius:16px}}
+.sheet{display:flex;flex-direction:column;gap:14px;padding:18px max(16px,env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+.sheet h2{margin:0;font:900 28px/1 var(--display);text-transform:uppercase}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label,.field .lab{font-size:13px;font-weight:600;color:var(--muted)}
+.field input,.field textarea,.field select{
+  width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:11px 12px;
+}
+.field textarea{min-height:76px;resize:vertical}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+details.more{border-top:1px solid var(--line);padding-top:10px}
+details.more summary{font-weight:600;color:var(--muted);padding:4px 0;cursor:pointer}
+details.more .inner{display:flex;flex-direction:column;gap:14px;padding-top:12px}
+.rate{display:flex;gap:6px}
+.rate button{
+  width:44px;height:44px;border:1px solid var(--line);background:var(--bg);border-radius:10px;
+  font-size:20px;color:var(--muted);line-height:1;
+}
+.rate button[aria-pressed="true"]{color:var(--gold);border-color:var(--gold)}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.actions .grow{flex:1}
+.io-text{font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;min-height:150px;white-space:pre;overflow:auto}
+.hint{margin:0;font-size:14px;color:var(--muted)}
+
+.toast{
+  position:fixed;z-index:20;left:50%;transform:translateX(-50%);
+  bottom:calc(124px + env(safe-area-inset-bottom));
+  background:var(--ink);color:var(--bg);border-radius:10px;padding:10px 14px;
+  display:flex;gap:14px;align-items:center;font-size:15px;max-width:calc(100% - 32px);
+}
+.toast button{border:0;background:none;color:inherit;font-weight:600;text-decoration:underline;padding:2px 0}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-row">
+    <button class="back" id="back" type="button" hidden>Back</button>
+    <h1 id="title">Concert Tracker</h1>
+  </div>
+  <p class="head-sub" id="sub"></p>
+  <div class="tools" id="tools">
+    <input type="search" id="q" placeholder="Search" aria-label="Search" autocomplete="off">
+    <select id="sort" aria-label="Sort by">
+      <option value="count">Most seen</option>
+      <option value="recent">Seen most recently</option>
+      <option value="longest">Longest since last seen</option>
+      <option value="az">A to Z</option>
+    </select>
+    <label class="chip" id="lapsed-wrap"><input type="checkbox" id="lapsed"> Not seen in 5+ years</label>
+  </div>
+</header>
+
+<main id="main" tabindex="-1"></main>
+
+<button class="fab" id="add" type="button">+ Add concert</button>
+
+<nav aria-label="Views">
+  <a href="#timeline" data-tab="timeline">Timeline</a>
+  <a href="#artists" data-tab="artists">Artists</a>
+  <a href="#venues" data-tab="venues">Venues</a>
+  <a href="#backup" data-tab="backup">Backup</a>
+</nav>
+
+<!-- add / edit -->
+<dialog id="sheet" aria-labelledby="sheet-title">
+  <form class="sheet" id="form" autocomplete="off">
+    <h2 id="sheet-title">Add concert</h2>
+    <div class="field">
+      <label for="f-date">Date</label>
+      <input type="date" id="f-date" required>
+    </div>
+    <div class="field">
+      <label for="f-artist">Artist or band</label>
+      <input type="text" id="f-artist" list="dl-artists" required autocapitalize="words" enterkeyhint="next">
+    </div>
+    <div class="two">
+      <div class="field">
+        <label for="f-venue">Venue</label>
+        <input type="text" id="f-venue" list="dl-venues" autocapitalize="words" enterkeyhint="next">
+      </div>
+      <div class="field">
+        <label for="f-city">City</label>
+        <input type="text" id="f-city" list="dl-cities" autocapitalize="words" enterkeyhint="done">
+      </div>
+    </div>
+    <details class="more" id="more">
+      <summary>More details</summary>
+      <div class="inner">
+        <div class="field">
+          <label for="f-support">Support acts, separated by commas</label>
+          <input type="text" id="f-support" autocapitalize="words">
+        </div>
+        <div class="field">
+          <span class="lab" id="rate-lab">Rating</span>
+          <div class="rate" id="rate" role="group" aria-labelledby="rate-lab">
+            <button type="button" id="rate-1" data-rate="1" aria-pressed="false" aria-label="1 star">★</button>
+            <button type="button" id="rate-2" data-rate="2" aria-pressed="false" aria-label="2 stars">★</button>
+            <button type="button" id="rate-3" data-rate="3" aria-pressed="false" aria-label="3 stars">★</button>
+            <button type="button" id="rate-4" data-rate="4" aria-pressed="false" aria-label="4 stars">★</button>
+            <button type="button" id="rate-5" data-rate="5" aria-pressed="false" aria-label="5 stars">★</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-price">Ticket price</label>
+          <input type="number" id="f-price" inputmode="decimal" min="0" step="any">
+        </div>
+        <div class="field">
+          <label for="f-notes">Notes</label>
+          <textarea id="f-notes"></textarea>
+        </div>
+      </div>
+    </details>
+    <div class="actions">
+      <button class="btn primary" id="save" type="submit">Save</button>
+      <button class="btn" id="cancel" type="button">Cancel</button>
+      <span class="grow"></span>
+      <button class="btn danger" id="delete" type="button" hidden>Delete</button>
+    </div>
+  </form>
+  <datalist id="dl-artists"></datalist>
+  <datalist id="dl-venues"></datalist>
+  <datalist id="dl-cities"></datalist>
+</dialog>
+
+<!-- export -->
+<dialog id="out" aria-labelledby="out-title">
+  <div class="sheet">
+    <h2 id="out-title">Backup file</h2>
+    <p class="hint" id="out-hint"></p>
+    <div class="field">
+      <label for="out-text">File contents</label>
+      <textarea class="io-text" id="out-text" readonly></textarea>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="out-save" type="button">Save file</button>
+      <button class="btn" id="out-copy" type="button">Copy text</button>
+      <span class="grow"></span>
+      <button class="btn" id="out-close" type="button">Close</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- import -->
+<dialog id="in" aria-labelledby="in-title">
+  <div class="sheet">
+    <h2 id="in-title">Import concerts</h2>
+    <p class="hint">Choose a JSON backup or a CSV spreadsheet, or paste its text. A CSV needs a header row with at least date and artist. Concerts you already have are skipped.</p>
+    <div class="field">
+      <label for="in-file">File</label>
+      <input type="file" id="in-file" accept=".json,.csv,.txt,application/json,text/csv,text/plain">
+    </div>
+    <div class="field">
+      <label for="in-text">Or paste text</label>
+      <textarea class="io-text" id="in-text" spellcheck="false"></textarea>
+    </div>
+    <p class="hint" id="in-msg" role="status"></p>
+    <div class="actions">
+      <button class="btn primary" id="in-go" type="button">Import</button>
+      <span class="grow"></span>
+      <button class="btn" id="in-close" type="button">Close</button>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" hidden><span id="toast-text"></span><button type="button" id="toast-undo" hidden>Undo</button></div>
+
+<script>
+/*LOGIC-START*/
+/* Pure functions: no page access in here, so they are easy to test and change. */
+const Logic = (() => {
+  const pad = n => String(n).padStart(2, '0');
+  const clean = s => String(s == null ? '' : s).trim().replace(/\s+/g, ' ');
+  const normKey = s => clean(s).toLowerCase();
+  const splitList = s => Array.isArray(s) ? s.map(clean).filter(Boolean)
+                                          : String(s == null ? '' : s).split(/[,;]/).map(clean).filter(Boolean);
+  const todayStr = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const uid = () => (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : 'c-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+
+  /* Accepts 2024-08-14, 14.08.2024 and 14/08/2024. Returns YYYY-MM-DD or ''. */
+  function parseDate(s) {
+    s = clean(s);
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    let y, mo, d;
+    if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+    else if ((m = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/))) { d = +m[1]; mo = +m[2]; y = +m[3]; }
+    else return '';
+    const t = new Date(y, mo - 1, d);
+    if (t.getFullYear() !== y || t.getMonth() !== mo - 1 || t.getDate() !== d) return '';
+    return `${y}-${pad(mo)}-${pad(d)}`;
+  }
+
+  const parts = s => s.split('-').map(Number);
+  function yearsBetween(from, to) {
+    const [ay, am, ad] = parts(from), [by, bm, bd] = parts(to);
+    return by - ay - ((bm < am || (bm === am && bd < ad)) ? 1 : 0);
+  }
+  function daysBetween(from, to) {
+    const [ay, am, ad] = parts(from), [by, bm, bd] = parts(to);
+    return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
+  }
+  function ago(date, today) {
+    const days = daysBetween(date, today);
+    if (days <= 0) return 'today';
+    if (days === 1) return 'yesterday';
+    if (days < 60) return `${days} days ago`;
+    const years = yearsBetween(date, today);
+    if (years < 1) return `${Math.floor(days / 30.44)} months ago`;
+    return years === 1 ? '1 year ago' : `${years} years ago`;
+  }
+
+  /* Turns anything (form values, a backup entry, a spreadsheet row) into a clean concert, or null. */
+  function sanitize(o) {
+    if (!o || typeof o !== 'object') return null;
+    const date = parseDate(o.date), artist = clean(o.artist);
+    if (!date || !artist) return null;
+    const rating = Math.round(Number(o.rating));
+    const priceText = String(o.price == null ? '' : o.price).replace(/\s/g, '').replace(',', '.');
+    const price = priceText === '' ? NaN : Number(priceText);
+    const c = {
+      id: clean(o.id) || uid(),
+      date, artist,
+      support: splitList(o.support),
+      venue: clean(o.venue),
+      city: clean(o.city),
+      rating: rating >= 1 && rating <= 5 ? rating : null,
+      price: Number.isFinite(price) && price >= 0 ? price : null,
+      notes: String(o.notes == null ? '' : o.notes).trim()
+    };
+    if (o.sample) c.sample = true;
+    return c;
+  }
+
+  const byDateDesc = (a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
+  const seen = (concerts, today) => concerts.filter(c => c.date <= today);
+
+  /* One entry per artist: how many times seen, first and last date. Support slots count too. */
+  function artistStats(concerts, today) {
+    const map = new Map();
+    const sorted = seen(concerts, today).slice().sort(byDateDesc).reverse();
+    for (const c of sorted) {
+      const add = (name, asSupport) => {
+        const key = normKey(name);
+        if (!key) return;
+        let a = map.get(key);
+        if (!a) map.set(key, a = { key, name, count: 0, support: 0, first: c.date, last: c.date });
+        a.name = name;            // the most recent spelling wins
+        a.count++; if (asSupport) a.support++;
+        a.last = c.date;
+      };
+      add(c.artist, false);
+      const dupes = new Set([normKey(c.artist)]);
+      for (const s of c.support) { const k = normKey(s); if (!dupes.has(k)) { dupes.add(k); add(s, true); } }
+    }
+    return [...map.values()];
+  }
+
+  function venueStats(concerts, today) {
+    const map = new Map();
+    const sorted = seen(concerts, today).slice().sort(byDateDesc).reverse();
+    for (const c of sorted) {
+      const key = normKey(c.venue);
+      if (!key) continue;
+      let v = map.get(key);
+      if (!v) map.set(key, v = { key, name: c.venue, city: c.city, count: 0, first: c.date, last: c.date });
+      v.name = c.venue; if (c.city) v.city = c.city;
+      v.count++; v.last = c.date;
+    }
+    return [...map.values()];
+  }
+
+  function sortStats(list, mode) {
+    const az = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    const out = list.slice();
+    if (mode === 'az') out.sort(az);
+    else if (mode === 'recent') out.sort((a, b) => (a.last < b.last ? 1 : a.last > b.last ? -1 : az(a, b)));
+    else if (mode === 'longest') out.sort((a, b) => (a.last > b.last ? 1 : a.last < b.last ? -1 : az(a, b)));
+    else out.sort((a, b) => b.count - a.count || (a.last < b.last ? 1 : a.last > b.last ? -1 : az(a, b)));
+    return out;
+  }
+
+  const playedBy = (c, key) => normKey(c.artist) === key || c.support.some(s => normKey(s) === key);
+
+  function matches(c, q) {
+    q = normKey(q);
+    if (!q) return true;
+    const hay = normKey([c.artist, c.support.join(' '), c.venue, c.city, c.notes, c.date].join(' '));
+    return q.split(' ').every(word => hay.includes(word));
+  }
+
+  /* ---- CSV ---- */
+  const CSV_COLS = ['date', 'artist', 'support', 'venue', 'city', 'rating', 'price', 'notes', 'id'];
+  function toCSV(concerts) {
+    const cell = v => { v = v == null ? '' : String(v); return /[",;\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    const rows = concerts.slice().sort(byDateDesc).map(c =>
+      CSV_COLS.map(k => cell(k === 'support' ? c.support.join('; ') : c[k])).join(','));
+    return [CSV_COLS.join(','), ...rows].join('\r\n') + '\r\n';
+  }
+  function parseCSV(text) {
+    text = String(text).replace(/^﻿/, '');
+    const firstLine = text.split(/\r?\n/, 1)[0];
+    const count = ch => firstLine.split(ch).length - 1;
+    const delim = count(';') > count(',') ? ';' : (count('\t') > count(',') ? '\t' : ',');
+    const rows = []; let row = [], cell = '', quoted = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (quoted) {
+        if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else quoted = false; }
+        else cell += ch;
+      } else if (ch === '"' && cell === '') quoted = true;
+      else if (ch === delim) { row.push(cell); cell = ''; }
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell); cell = ''; rows.push(row); row = [];
+      } else cell += ch;
+    }
+    if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+    return rows.filter(r => r.some(v => v.trim() !== ''));
+  }
+  const ALIASES = { band: 'artist', act: 'artist', 'support acts': 'support', place: 'venue', town: 'city', note: 'notes', cost: 'price', 'ticket price': 'price', stars: 'rating' };
+  function rowsToObjects(rows) {
+    if (rows.length < 2) return [];
+    const head = rows[0].map(h => { const k = normKey(h); return ALIASES[k] || k; });
+    return rows.slice(1).map(r => Object.fromEntries(head.map((h, i) => [h, r[i] == null ? '' : r[i]])));
+  }
+
+  /* ---- import / export ---- */
+  function toBackup(concerts, now = new Date()) {
+    const own = concerts.filter(c => !c.sample).slice().sort(byDateDesc);
+    return JSON.stringify({ app: 'concert-tracker', version: 1, exported: now.toISOString(), concerts: own }, null, 2);
+  }
+  /* Reads a JSON backup or a CSV. Returns { concerts, invalid }. Throws on unreadable JSON. */
+  function parseImport(text) {
+    const t = String(text).replace(/^﻿/, '').trim();
+    let raw;
+    if (t[0] === '{' || t[0] === '[') {
+      const data = JSON.parse(t);
+      raw = Array.isArray(data) ? data : (data && Array.isArray(data.concerts) ? data.concerts : []);
+    } else raw = rowsToObjects(parseCSV(t));
+    const concerts = [];
+    let invalid = 0;
+    for (const o of raw) {
+      const c = sanitize(o);
+      if (c) { delete c.sample; concerts.push(c); } else invalid++;
+    }
+    return { concerts, invalid };
+  }
+  const signature = c => [c.date, normKey(c.artist), normKey(c.venue)].join('|');
+  function mergeImport(existing, incoming) {
+    const ids = new Set(existing.map(c => c.id));
+    const sigs = new Set(existing.map(signature));
+    const list = existing.slice();
+    let added = 0, skipped = 0;
+    for (const c of incoming) {
+      if (ids.has(c.id) || sigs.has(signature(c))) { skipped++; continue; }
+      ids.add(c.id); sigs.add(signature(c)); list.push(c); added++;
+    }
+    return { list, added, skipped };
+  }
+
+  return { pad, clean, normKey, splitList, todayStr, uid, parseDate, yearsBetween, daysBetween, ago, sanitize,
+           byDateDesc, artistStats, venueStats, sortStats, playedBy, matches, toCSV, parseCSV, rowsToObjects,
+           toBackup, parseImport, mergeImport };
+})();
+/*LOGIC-END*/
+</script>
+
+<script>
+(() => {
+  const L = Logic;
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const fmtDate = d => { const [y, m, day] = d.split('-').map(Number); return `${day} ${MONTHS[m - 1]} ${y}`; };
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`;
+
+  /* ---------- storage: everything lives in this browser ---------- */
+  const KEY = 'concert-tracker.concerts.v1', META = 'concert-tracker.meta.v1';
+  let storageOK = true;
+  const read = key => { try { return localStorage.getItem(key); } catch (e) { storageOK = false; return null; } };
+  const write = (key, value) => { try { localStorage.setItem(key, value); storageOK = true; } catch (e) { storageOK = false; } };
+
+  const SAMPLES = [
+    ['2026-08-13', 'Kvelertak', 'Tøyenparken', 'Oslo', [], 5, 'Festival set. Example entry.'],
+    ['2026-03-21', 'Highasakite', 'Sentrum Scene', 'Oslo', ['Fieh'], 4, ''],
+    ['2025-11-08', 'Aurora', 'Oslo Spektrum', 'Oslo', [], 5, ''],
+    ['2024-06-26', 'Metallica', 'Ullevaal Stadion', 'Oslo', ['Kvelertak'], 4, ''],
+    ['2023-02-17', 'Kvelertak', 'Rockefeller', 'Oslo', [], 4, ''],
+    ['2019-10-04', 'Turbonegro', 'Rockefeller', 'Oslo', [], 3, ''],
+    ['2018-05-02', 'Metallica', 'Telenor Arena', 'Bærum', [], 5, ''],
+    ['2016-09-10', 'Röyksopp', 'Sentrum Scene', 'Oslo', [], 4, '']
+  ].map((s, i) => ({ id: 'sample-' + i, date: s[0], artist: s[1], venue: s[2], city: s[3], support: s[4], rating: s[5], price: null, notes: s[6], sample: true }));
+
+  function load() {
+    const raw = read(KEY);
+    if (raw == null) return SAMPLES.slice();           // first visit: show marked examples
+    try { return JSON.parse(raw).map(L.sanitize).filter(Boolean); } catch (e) { return []; }
+  }
+  let meta = {};
+  try { meta = JSON.parse(read(META) || '{}') || {}; } catch (e) { meta = {}; }
+
+  const state = {
+    concerts: load(),
+    tab: 'timeline',
+    detail: null,            // { type: 'artist' | 'venue', key }
+    q: '',
+    sort: { artists: 'count', venues: 'count' },
+    lapsed: false,
+    editing: null,
+    rating: null
+  };
+
+  function persist(changed = true) {
+    write(KEY, JSON.stringify(state.concerts));
+    if (changed) { meta.changedAt = Date.now(); write(META, JSON.stringify(meta)); }
+  }
+  const own = () => state.concerts.filter(c => !c.sample);
+  function backupDue() {
+    if (!own().length || !(meta.changedAt > (meta.lastBackup || 0))) return false;
+    return meta.lastBackup ? Date.now() - meta.lastBackup > 14 * 86400000 : own().length >= 5;
+  }
+
+  /* ---------- rendering ---------- */
+  const stars = n => n ? `<span class="stars" aria-label="${n} of 5 stars">${'★'.repeat(n)}${'☆'.repeat(5 - n)}</span>` : '';
+
+  function stubHTML(c, today) {
+    const [, m, d] = c.date.split('-').map(Number);
+    const place = [c.venue, c.city].filter(Boolean).join(' · ');
+    const side = (c.date > today ? '<span class="pill">Upcoming</span>' : '') + stars(c.rating);
+    return `<li><button class="stub" type="button" data-edit="${esc(c.id)}">
+      <span class="stub-date"><b>${d}</b><span>${MONTHS[m - 1].toUpperCase()}</span></span>
+      <span class="stub-body">
+        <span class="stub-artist">${esc(c.artist)}</span>
+        ${place ? `<span class="stub-meta">${esc(place)}</span>` : ''}
+        ${c.support.length ? `<span class="stub-meta">with ${esc(c.support.join(', '))}</span>` : ''}
+      </span>
+      ${side ? `<span class="stub-side">${side}</span>` : ''}
+    </button></li>`;
+  }
+
+  function timelineHTML(list, today) {
+    const sorted = list.slice().sort(L.byDateDesc);
+    let html = '', year = null, open = false;
+    for (const c of sorted) {
+      const y = c.date.slice(0, 4);
+      if (y !== year) {
+        if (open) html += '</ul>';
+        const n = sorted.filter(x => x.date.slice(0, 4) === y).length;
+        html += `<div class="year"><b>${y}</b><span>${plural(n, 'concert')}</span></div><ul class="list">`;
+        year = y; open = true;
+      }
+      html += stubHTML(c, today);
+    }
+    return html + (open ? '</ul>' : '');
+  }
+
+  function statRowHTML(s, type, today) {
+    const sub = type === 'artist'
+      ? `Last seen ${fmtDate(s.last)} · ${L.ago(s.last, today)}${s.support ? ` · ${s.support} as support` : ''}`
+      : `${s.city ? esc(s.city) + ' · ' : ''}Last visit ${fmtDate(s.last)}`;
+    return `<li><button class="row" type="button" data-open="${type}" data-key="${esc(s.key)}">
+      <span class="row-count"><small>×</small>${s.count}</span>
+      <span class="row-main"><span class="row-name">${esc(s.name)}</span><span class="row-meta">${sub}</span></span>
+    </button></li>`;
+  }
+
+  function backupHTML() {
+    const n = own().length;
+    const last = meta.lastBackup ? `Last backup ${L.ago(L.todayStr(new Date(meta.lastBackup)), L.todayStr())}.` : 'No backup made yet.';
+    const pending = n && meta.changedAt > (meta.lastBackup || 0);
+    return `
+      <section class="panel">
+        <h2>Back up</h2>
+        <p>Your ${plural(n, 'concert')} ${n === 1 ? 'is' : 'are'} stored only in this browser on this device. Save a backup file now and then, and keep it somewhere safe such as iCloud Drive.</p>
+        <p${pending ? ' class="warn"' : ''}>${last}${pending ? ' You have changes that are not backed up.' : ''}</p>
+        <div class="btn-row">
+          <button class="btn primary" type="button" data-export="json">Back up everything</button>
+          <button class="btn" type="button" data-export="csv">Export as spreadsheet</button>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Restore or import</h2>
+        <p>Bring back a backup, or import concerts from a spreadsheet saved as CSV.</p>
+        <div class="btn-row"><button class="btn" type="button" data-import="1">Import concerts</button></div>
+      </section>`;
+  }
+
+  function render() {
+    const today = L.todayStr();
+    const seenList = state.concerts.filter(c => c.date <= today);
+    const artists = L.artistStats(state.concerts, today);
+    const venues = L.venueStats(state.concerts, today);
+    const main = $('main');
+    let html = '';
+
+    if (!storageOK) html += `<div class="notice"><span>This browser is blocking storage, so concerts will be lost when you close the page.</span></div>`;
+    const samples = state.concerts.filter(c => c.sample).length;
+    if (samples && state.tab !== 'backup') {
+      html += `<div class="notice"><span>${plural(samples, 'concert')} here ${samples === 1 ? 'is an example' : 'are examples'} so you can see how the app looks.</span><button type="button" data-clear-samples="1">Remove examples</button></div>`;
+    }
+
+    const d = state.detail;
+    $('back').hidden = !d;
+    $('tools').hidden = !!d || state.tab === 'backup';
+    $('sort').hidden = state.tab === 'timeline';
+    $('lapsed-wrap').hidden = state.tab !== 'artists';
+    $('sort').value = state.sort[state.tab] || 'count';
+    $('q').placeholder = { timeline: 'Search concerts', artists: 'Search artists', venues: 'Search venues' }[state.tab] || 'Search';
+
+    if (d) {
+      const stat = (d.type === 'artist' ? artists : venues).find(s => s.key === d.key);
+      const list = state.concerts.filter(c => d.type === 'artist' ? L.playedBy(c, d.key) : L.normKey(c.venue) === d.key);
+      $('title').textContent = stat ? stat.name : (list[0] ? (d.type === 'artist' ? list[0].artist : list[0].venue) : 'Not found');
+      $('sub').textContent = stat
+        ? (d.type === 'artist'
+            ? `Seen ${plural(stat.count, 'time')} · first ${fmtDate(stat.first)} · last ${fmtDate(stat.last)} (${L.ago(stat.last, today)})`
+            : `${plural(stat.count, 'concert')} here · first ${fmtDate(stat.first)} · last ${fmtDate(stat.last)}`)
+        : 'Not seen yet';
+      html += list.length ? timelineHTML(list, today) : '<p class="empty">No concerts left here.</p>';
+    } else {
+      $('title').textContent = 'Concert Tracker';
+      $('sub').textContent = `${plural(seenList.length, 'concert')} · ${plural(artists.length, 'artist')} · ${plural(venues.length, 'venue')}`;
+      if (state.tab === 'timeline') {
+        const list = state.concerts.filter(c => L.matches(c, state.q));
+        html += list.length ? timelineHTML(list, today)
+          : `<p class="empty">${state.q ? `Nothing matches “${esc(state.q)}”.` : 'No concerts yet. Tap Add concert to log your first one.'}</p>`;
+      } else if (state.tab === 'artists' || state.tab === 'venues') {
+        const type = state.tab === 'artists' ? 'artist' : 'venue';
+        const q = L.normKey(state.q);
+        let list = (type === 'artist' ? artists : venues)
+          .filter(s => !q || L.normKey(s.name + ' ' + (s.city || '')).includes(q));
+        if (type === 'artist' && state.lapsed) list = list.filter(s => L.yearsBetween(s.last, today) >= 5);
+        list = L.sortStats(list, state.sort[state.tab]);
+        html += list.length
+          ? `<ul class="list">${list.map(s => statRowHTML(s, type, today)).join('')}</ul>`
+          : `<p class="empty">${state.q || state.lapsed ? 'Nothing matches.' : `No ${state.tab} yet.`}</p>`;
+      } else html += backupHTML();
+    }
+    main.innerHTML = html;
+
+    document.querySelectorAll('nav a').forEach(a => {
+      const on = a.dataset.tab === state.tab;
+      if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+      if (a.dataset.tab === 'backup') a.innerHTML = 'Backup' + (backupDue() ? '<span class="dot" title="Backup due"></span>' : '');
+    });
+  }
+
+  /* ---------- toast ---------- */
+  let toastTimer = null, undoFn = null;
+  function toast(text, undo) {
+    $('toast-text').textContent = text;
+    undoFn = undo || null;
+    $('toast-undo').hidden = !undo;
+    $('toast').hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { $('toast').hidden = true; undoFn = null; }, undo ? 7000 : 2500);
+  }
+  $('toast-undo').addEventListener('click', () => { if (undoFn) undoFn(); $('toast').hidden = true; undoFn = null; });
+
+  /* ---------- add / edit form ---------- */
+  function fillLists() {
+    const today = '9999-12-31';
+    const opts = names => names.map(n => `<option value="${esc(n)}"></option>`).join('');
+    $('dl-artists').innerHTML = opts(L.sortStats(L.artistStats(state.concerts, today), 'az').map(a => a.name));
+    $('dl-venues').innerHTML = opts(L.sortStats(L.venueStats(state.concerts, today), 'az').map(v => v.name));
+    $('dl-cities').innerHTML = opts([...new Set(state.concerts.map(c => c.city).filter(Boolean))].sort());
+  }
+  function setRating(n) {
+    state.rating = n;
+    document.querySelectorAll('#rate button').forEach(b => b.setAttribute('aria-pressed', String(n != null && +b.dataset.rate <= n)));
+  }
+  function openForm(c) {
+    state.editing = c ? c.id : null;
+    $('sheet-title').textContent = c ? 'Edit concert' : 'Add concert';
+    $('f-date').value = c ? c.date : L.todayStr();
+    $('f-artist').value = c ? c.artist : (state.detail && state.detail.type === 'artist' ? $('title').textContent : '');
+    $('f-venue').value = c ? c.venue : '';
+    $('f-city').value = c ? c.city : '';
+    $('f-support').value = c ? c.support.join(', ') : '';
+    $('f-price').value = c && c.price != null ? c.price : '';
+    $('f-notes').value = c ? c.notes : '';
+    setRating(c ? c.rating : null);
+    $('more').open = !!(c && (c.support.length || c.rating || c.price != null || c.notes));
+    $('delete').hidden = !c;
+    fillLists();
+    $('sheet').showModal();
+    if (!c) $('f-artist').focus();
+  }
+  $('rate').addEventListener('click', e => {
+    const b = e.target.closest('button[data-rate]');
+    if (b) setRating(state.rating === +b.dataset.rate ? null : +b.dataset.rate);
+  });
+  /* A venue you have used before fills in its city. */
+  $('f-venue').addEventListener('change', () => {
+    if ($('f-city').value.trim()) return;
+    const v = L.venueStats(state.concerts, '9999-12-31').find(x => x.key === L.normKey($('f-venue').value));
+    if (v && v.city) $('f-city').value = v.city;
+  });
+  $('form').addEventListener('submit', e => {
+    e.preventDefault();
+    const c = L.sanitize({
+      id: state.editing, date: $('f-date').value, artist: $('f-artist').value, venue: $('f-venue').value,
+      city: $('f-city').value, support: $('f-support').value, rating: state.rating, price: $('f-price').value, notes: $('f-notes').value
+    });
+    if (!c) { $('form').reportValidity(); return; }
+    /* Reuse the spelling you already have, so "metallica" joins "Metallica". */
+    const known = L.artistStats(state.concerts, '9999-12-31');
+    const same = name => { const k = known.find(a => a.key === L.normKey(name)); return k ? k.name : name; };
+    if (!state.editing) { c.artist = same(c.artist); c.support = c.support.map(same); }
+    const i = state.concerts.findIndex(x => x.id === state.editing);
+    if (i >= 0) state.concerts[i] = c; else state.concerts.push(c);
+    persist();
+    $('sheet').close();
+    render();
+    toast(i >= 0 ? 'Changes saved' : 'Concert added');
+  });
+  $('cancel').addEventListener('click', () => $('sheet').close());
+  $('delete').addEventListener('click', () => {
+    const i = state.concerts.findIndex(x => x.id === state.editing);
+    if (i < 0) return;
+    const [gone] = state.concerts.splice(i, 1);
+    persist();
+    $('sheet').close();
+    render();
+    toast('Concert deleted', () => { state.concerts.push(gone); persist(); render(); });
+  });
+
+  /* ---------- export ---------- */
+  let outFile = null;
+  function openExport(kind) {
+    const stamp = L.todayStr();
+    outFile = kind === 'csv'
+      ? { name: `concerts-${stamp}.csv`, mime: 'text/csv', text: L.toCSV(own()), bom: true }
+      : { name: `concerts-backup-${stamp}.json`, mime: 'application/json', text: L.toBackup(state.concerts) };
+    $('out-title').textContent = kind === 'csv' ? 'Spreadsheet file' : 'Backup file';
+    $('out-hint').textContent = `${plural(own().length, 'concert')}. Save the file, or copy the text and paste it into a note. If nothing happens when you save, use Copy text.`;
+    $('out-text').value = outFile.text;
+    $('out').showModal();
+  }
+  function markBackedUp() { meta.lastBackup = Date.now(); write(META, JSON.stringify(meta)); render(); }
+  async function saveFile(f) {
+    const blob = new Blob([(f.bom ? '﻿' : '') + f.text], { type: f.mime });
+    try {   // on a phone, the share sheet is the reliable way to save a file
+      const file = new File([blob], f.name, { type: f.mime });
+      if (matchMedia('(pointer: coarse)').matches && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file] });
+        return true;
+      }
+    } catch (e) { if (e && e.name === 'AbortError') return false; }
+    try {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = f.name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      return true;
+    } catch (e) { return false; }
+  }
+  $('out-save').addEventListener('click', async () => { if (outFile && await saveFile(outFile)) markBackedUp(); });
+  $('out-copy').addEventListener('click', async () => {
+    let ok = false;
+    try { await navigator.clipboard.writeText(outFile.text); ok = true; }
+    catch (e) { try { $('out-text').select(); ok = document.execCommand('copy'); } catch (e2) { ok = false; } }
+    if (ok) markBackedUp();
+    $('out-copy').textContent = ok ? 'Copied' : 'Select the text and copy it';
+    setTimeout(() => { $('out-copy').textContent = 'Copy text'; }, 2500);
+  });
+  $('out-close').addEventListener('click', () => $('out').close());
+
+  /* ---------- import ---------- */
+  function openImport() { $('in-text').value = ''; $('in-file').value = ''; $('in-msg').textContent = ''; $('in').showModal(); }
+  $('in-file').addEventListener('change', async () => {
+    const f = $('in-file').files[0];
+    if (!f) return;
+    try { $('in-text').value = await f.text(); $('in-msg').textContent = `Loaded ${f.name}. Tap Import to add it.`; }
+    catch (e) { $('in-msg').textContent = 'That file could not be read. Try pasting its text instead.'; }
+  });
+  $('in-go').addEventListener('click', () => {
+    const text = $('in-text').value;
+    if (!text.trim()) { $('in-msg').textContent = 'Choose a file or paste some text first.'; return; }
+    let parsed;
+    try { parsed = L.parseImport(text); }
+    catch (e) { $('in-msg').textContent = 'That text is not a valid backup. Check that you copied all of it.'; return; }
+    if (!parsed.concerts.length) {
+      $('in-msg').textContent = 'No concerts found. A CSV needs a header row with date and artist columns.';
+      return;
+    }
+    const before = state.concerts.filter(c => !c.sample);
+    const merged = L.mergeImport(before, parsed.concerts);
+    state.concerts = merged.list;       // importing real data replaces the examples
+    persist(merged.added > 0);
+    render();
+    $('in-msg').textContent = `Added ${merged.added}. Skipped ${merged.skipped} you already had`
+      + (parsed.invalid ? ` and ${parsed.invalid} without a readable date or artist.` : '.');
+  });
+  $('in-close').addEventListener('click', () => $('in').close());
+
+  /* ---------- navigation and list clicks ---------- */
+  const TABS = ['timeline', 'artists', 'venues', 'backup'];
+  function route() {
+    const tab = location.hash.replace('#', '');
+    state.tab = TABS.includes(tab) ? tab : 'timeline';
+    state.detail = null; state.q = ''; $('q').value = '';
+    render();
+    $('main').scrollTop = 0;
+  }
+  window.addEventListener('hashchange', route);
+  document.querySelector('nav').addEventListener('click', e => {
+    const a = e.target.closest('a[data-tab]');
+    if (a && a.dataset.tab === state.tab) { e.preventDefault(); route(); }   // tapping the current tab leaves a detail page
+  });
+  $('back').addEventListener('click', () => { state.detail = null; render(); });
+  $('add').addEventListener('click', () => openForm(null));
+  $('q').addEventListener('input', () => { state.q = $('q').value; render(); });
+  $('sort').addEventListener('change', () => { state.sort[state.tab] = $('sort').value; render(); });
+  $('lapsed').addEventListener('change', () => { state.lapsed = $('lapsed').checked; render(); });
+  $('main').addEventListener('click', e => {
+    const t = e.target.closest('[data-edit],[data-open],[data-export],[data-import],[data-clear-samples]');
+    if (!t) return;
+    if (t.dataset.edit) openForm(state.concerts.find(c => c.id === t.dataset.edit));
+    else if (t.dataset.open) { state.detail = { type: t.dataset.open, key: t.dataset.key }; render(); $('main').scrollTop = 0; }
+    else if (t.dataset.export) openExport(t.dataset.export);
+    else if (t.dataset.import) openImport();
+    else if (t.dataset.clearSamples) { state.concerts = own(); persist(false); render(); }
+  });
+
+  route();
+
+  /* Offline support and "please keep my data" only apply once the app is on its own web address. */
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (e) {}
+  try { if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {}); } catch (e) {}
+})();
+</script>
+</body>
+</html>
